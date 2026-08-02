@@ -1,0 +1,33 @@
+/* BASEAPP — estilos minimos. Substitua/expanda por projeto. */
+
+body {
+    background-color: #f4f6f9;
+}
+
+.auth-wrapper {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.auth-card {
+    max-width: 380px;
+    width: 100%;
+}
+
+.sidebar {
+    min-height: 100vh;
+    background-color: #101828;
+}
+
+.sidebar .nav-link {
+    color: #cbd5e1;
+}
+
+.sidebar .nav-link.active,
+.sidebar .nav-link:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, .08);
+    border-radius: .375rem;
+}

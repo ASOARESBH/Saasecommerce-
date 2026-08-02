@@ -1,0 +1,17 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Redireciona todas as requisicoes para a pasta public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Protege arquivos sensiveis na raiz
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+<FilesMatch "^(composer\.json|composer\.lock|README\.md|DEPLOY_HOSTGATOR\.md)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
