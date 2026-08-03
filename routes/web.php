@@ -36,6 +36,17 @@ Router::group(['middleware' => [AuthMiddleware::class, SessionTimeoutMiddleware:
     // Dashboard (exemplo)
     Router::get('/dashboard', 'DashboardController@index');
 
+    // ============================================================
+    // API CNPJ — Endpoint centralizado com cache, rate-limit e fallback
+    // Opcao A: exige apenas autenticacao (sem permissao especifica)
+    // Opcao B: descomente o PermissionMiddleware abaixo para restringir por role
+    // ============================================================
+    Router::group(['prefix' => '/api'], function () {
+        Router::get('/cnpj/{cnpj}', 'CnpjController@consultar');
+        // Com permissao especifica (descomente para ativar):
+        // Router::get('/cnpj/{cnpj}', 'CnpjController@consultar', [[PermissionMiddleware::class, 'consultar_cnpj']]);
+    });
+
     // Usuarios — exemplo de CRUD protegido por permissao (RBAC vindo do banco)
     Router::group(['prefix' => '/usuarios'], function () {
         Router::get('',               'UsuariosController@index',        [[PermissionMiddleware::class, 'manage_users']]);
