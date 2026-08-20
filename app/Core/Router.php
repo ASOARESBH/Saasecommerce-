@@ -1,87 +1,79 @@
 <?php
 namespace App\Core;
 
-class Router {
+class Router
+{
     private static array $routes = [];
     private static array $groupStack = [];
+    private static array $publicRoutes = ['/login', '/logout', '/api/v1', '/webhooks'];
 
-    // Rotas publicas que nao precisam de autenticacao
-    private static array $publicRoutes = [
-        '/login',
-        '/logout',
-    ];
+    public static function get(string $path, $handler, array $middleware = []): void { self::addRoute('GET', $path, $handler, $middleware); }
+    public static function post(string $path, $handler, array $middleware = []): void { self::addRoute('POST', $path, $handler, $middleware); }
+    public static function put(string $path, $handler, array $middleware = []): void { self::addRoute('PUT', $path, $handler, $middleware); }
+    public static function patch(string $path, $handler, array $middleware = []): void { self::addRoute('PATCH', $path, $handler, $middleware); }
+    public static function delete(string $path, $handler, array $middleware = []): void { self::addRoute('DELETE', $path, $handler, $middleware); }
 
-    public static function get(string $path, $handler, array $middleware = []): void {
-        self::addRoute('GET', $path, $handler, $middleware);
-    }
-
-    public static function post(string $path, $handler, array $middleware = []): void {
-        self::addRoute('POST', $path, $handler, $middleware);
-    }
-
-    private static function addRoute(string $method, string $path, $handler, array $middleware): void {
+    private static function addRoute(string $method, string $path, $handler, array $middleware): void
+    {
         self::$routes[] = [
-            'method'     => $method,
-            'path'       => self::currentPrefix() . $path,
-            'handler'    => $handler,
+            'method' => $method,
+            'path' => self::currentPrefix() . $path,
+            'handler' => $handler,
             'middleware' => array_merge(self::currentGroupMiddleware(), $middleware),
         ];
     }
 
-    /**
-     * Agrupa rotas sob um prefixo e/ou uma lista de middlewares comuns.
-     *
-     * Exemplo:
-     *   Router::group(['prefix' => '/admin', 'middleware' => [AuthMiddleware::class]], function () {
-     *       Router::get('/usuarios', 'UsuariosController@index');
-     *   });
-     */
-    public static function group(array $options, callable $callback): void {
+    public static function group(array $options, callable $callback): void
+    {
         self::$groupStack[] = $options;
         $callback();
         array_pop(self::$groupStack);
     }
 
-    private static function currentPrefix(): string {
+    private static function currentPrefix(): string
+    {
         $prefix = '';
-        foreach (self::$groupStack as $group) {
-            $prefix .= $group['prefix'] ?? '';
-        }
+        foreach (self::$groupStack as $group) $prefix .= $group['prefix'] ?? '';
         return $prefix;
     }
 
-    private static function currentGroupMiddleware(): array {
+    private static function currentGroupMiddleware(): array
+    {
         $middleware = [];
-        foreach (self::$groupStack as $group) {
-            $middleware = array_merge($middleware, $group['middleware'] ?? []);
-        }
+        foreach (self::$groupStack as $group) $middleware = array_merge($middleware, $group['middleware'] ?? []);
         return $middleware;
     }
 
-    /**
-     * Define quais rotas podem ser acessadas sem autenticacao.
-     * Chame isso nas suas rotas (ex: routes/web.php) se precisar
-     * liberar caminhos adicionais.
-     */
-    public static function publicRoutes(array $paths): void {
-        self::$publicRoutes = array_merge(self::$publicRoutes, $paths);
-    }
+    public static function publicRoutes(array $paths): void { self::$publicRoutes = array_merge(self::$publicRoutes, $paths); }
 
-    private static function isPublicRoute(string $uri): bool {
+    private static function isPublicRoute(string $uri): bool
+    {
         foreach (self::$publicRoutes as $pub) {
-            if ($uri === $pub || strpos($uri, $pub) === 0) {
-                return true;
-            }
+            if ($uri === $pub || str_starts_with($uri, rtrim($pub, '/') . '/')) return true;
         }
         return false;
     }
 
-    public static function dispatch(): void {
-        $method = $_SERVER['REQUEST_METHOD'];
-        $uri    = strtok($_SERVER['REQUEST_URI'], '?');
+    private static function isApiRequest(string $uri): bool
+    {
+        return str_starts_with($uri, '/api/') || str_starts_with($uri, '/webhooks');
+    }
 
-        // Redireciona para login se nao autenticado e a rota nao e publica
-        if (!self::isPublicRoute($uri) && !Auth::check()) {
+    public static function dispatch(): void
+    {
+        $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+        $uri = strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?: '/';
+        $isApi = self::isApiRequest($uri);
+
+        if ($method === 'OPTIONS' && $isApi) {
+            header('Access-Control-Allow-Origin: *');
+            header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key, X-API-Secret, X-Signature, X-Timestamp, Idempotency-Key');
+            header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+            http_response_code(204);
+            return;
+        }
+
+        if (!$isApi && !self::isPublicRoute($uri) && !Auth::check()) {
             header('Location: /login');
             exit;
         }
@@ -89,59 +81,56 @@ class Router {
         foreach (self::$routes as $route) {
             $pattern = preg_replace('/\{[^}]+\}/', '([^/]+)', $route['path']);
             $pattern = '#^' . $pattern . '$#';
+            if ($route['method'] !== $method || !preg_match($pattern, $uri, $matches)) continue;
+            array_shift($matches);
 
-            if ($route['method'] === $method && preg_match($pattern, $uri, $matches)) {
-                array_shift($matches);
-
-                try {
-                    if (!empty($route['middleware'])) {
-                        Middleware::run($route['middleware']);
-                    }
-
-                    if (is_callable($route['handler'])) {
-                        call_user_func_array($route['handler'], $matches);
-                        return;
-                    }
-
-                    [$controllerName, $action] = explode('@', $route['handler']);
-                    $class = "App\\Controllers\\{$controllerName}";
-
-                    if (!class_exists($class)) {
-                        http_response_code(500);
-                        Logger::error("Controller nao encontrado: {$class}");
-                        echo "<h1>Erro 500</h1><p>Controller <code>{$class}</code> nao encontrado.</p>";
-                        return;
-                    }
-
-                    $controller = new $class();
-                    call_user_func_array([$controller, $action], $matches);
-                } catch (\Throwable $e) {
-                    self::handleError($e);
+            try {
+                if (!empty($route['middleware'])) Middleware::run($route['middleware']);
+                if (is_callable($route['handler'])) {
+                    call_user_func_array($route['handler'], $matches);
+                    return;
                 }
+                [$controllerName, $action] = explode('@', $route['handler']);
+                $class = str_contains($controllerName, '\\')
+                    ? 'App\\Controllers\\' . $controllerName
+                    : 'App\\Controllers\\' . $controllerName;
+                if (!class_exists($class)) {
+                    Logger::error("Controller não encontrado: {$class}");
+                    if ($isApi) ApiResponse::error('Rota indisponível.', 500, 'CONTROLLER_NOT_FOUND');
+                    http_response_code(500);
+                    echo '<h1>Erro 500</h1><p>Controller não encontrado.</p>';
+                    return;
+                }
+                $controller = new $class();
+                call_user_func_array([$controller, $action], $matches);
+                return;
+            } catch (\Throwable $e) {
+                self::handleError($e, $isApi);
                 return;
             }
         }
 
+        if ($isApi) ApiResponse::error('Endpoint não encontrado.', 404, 'NOT_FOUND');
         http_response_code(404);
-        echo '<h1>404 - Pagina nao encontrada</h1>';
+        echo '<h1>404 - Página não encontrada</h1>';
     }
 
-    private static function handleError(\Throwable $e): void {
-        http_response_code(500);
-        Logger::error('Erro nao tratado na rota', [
+    private static function handleError(\Throwable $e, bool $isApi): void
+    {
+        Logger::error('Erro não tratado na rota', [
             'exception' => $e->getMessage(),
-            'file'      => $e->getFile(),
-            'line'      => $e->getLine(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
         ]);
-
+        if ($isApi) {
+            $status = $e->getCode() >= 400 && $e->getCode() <= 599 ? $e->getCode() : 500;
+            ApiResponse::error($status === 500 ? 'Erro interno do servidor.' : $e->getMessage(), $status, 'INTERNAL_ERROR');
+        }
+        http_response_code(500);
         if (($_ENV['APP_DEBUG'] ?? 'false') === 'true') {
-            echo "<h1>Erro 500</h1>";
-            echo "<p><strong>Mensagem:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
-            echo "<p><strong>Arquivo:</strong> " . htmlspecialchars($e->getFile()) . " na linha " . $e->getLine() . "</p>";
-            echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
+            echo '<h1>Erro 500</h1><p>' . htmlspecialchars($e->getMessage()) . '</p>';
         } else {
-            echo "<h1>Erro 500 - Erro Interno do Servidor</h1>";
-            echo "<p>Ocorreu um erro ao processar sua requisicao. Tente novamente mais tarde.</p>";
+            echo '<h1>Erro 500 - Erro Interno do Servidor</h1><p>Ocorreu um erro ao processar sua requisição.</p>';
         }
     }
 }

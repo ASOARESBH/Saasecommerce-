@@ -42,6 +42,9 @@ header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+header("Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+
 
 // Carrega o autoloader customizado (nao depende do composer no servidor)
 require_once APP_PATH . '/autoload.php';
@@ -79,6 +82,18 @@ if (!function_exists('loadEnv')) {
 
 // Carrega variaveis de ambiente
 loadEnv(BASE_PATH . '/.env');
+
+$bootstrapUri = strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?: '/';
+if (str_starts_with($bootstrapUri, '/api/') || str_starts_with($bootstrapUri, '/webhooks')) {
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    $allowedOrigins = array_filter(array_map('trim', explode(',', (string) ($_ENV['CORS_ALLOWED_ORIGINS'] ?? ''))));
+    if ($origin !== '' && (in_array('*', $allowedOrigins, true) || in_array($origin, $allowedOrigins, true))) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+        header('Vary: Origin');
+    }
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key, X-API-Secret, X-Signature, X-Timestamp, X-Event-Id, Idempotency-Key');
+    header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+}
 
 // Configura timezone
 date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'America/Sao_Paulo');

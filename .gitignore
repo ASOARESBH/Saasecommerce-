@@ -6,6 +6,9 @@
 !/storage/sessions/.gitkeep
 /storage/uploads/*
 !/storage/uploads/.gitkeep
+/storage/backups/*
+!/storage/backups/.gitkeep
+/coverage/
 .DS_Store
 .idea/
 .vscode/

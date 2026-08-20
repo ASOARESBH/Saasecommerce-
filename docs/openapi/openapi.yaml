@@ -1,0 +1,218 @@
+openapi: 3.0.3
+info:
+  title: SaaS E-commerce API
+  version: 1.0.0
+  description: API multi-tenant para catálogo, clientes, pedidos, entrega, cupons e eventos.
+servers:
+  - url: https://seu-dominio.example.com
+security:
+  - apiKey: []
+  - bearer: []
+tags:
+  - name: Catalog
+  - name: Orders
+  - name: Customers
+  - name: Delivery
+  - name: Coupons
+  - name: Analytics
+paths:
+  /api/v1/products:
+    get:
+      tags: [Catalog]
+      summary: Lista o catálogo de produtos do tenant autenticado
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PerPage'}
+        - {name: category, in: query, schema: {type: string}}
+        - {name: search, in: query, schema: {type: string}}
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '401': {$ref: '#/components/responses/Error'}
+  /api/v1/menu:
+    get:
+      tags: [Catalog]
+      summary: Alias de catálogo para canais comerciais
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+  /api/v1/categories:
+    get:
+      tags: [Catalog]
+      summary: Lista categorias ativas
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/addons:
+    get:
+      tags: [Catalog]
+      summary: Lista adicionais e complementos ativos
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/combos:
+    get:
+      tags: [Catalog]
+      summary: Lista combos vigentes
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/settings:
+    get:
+      tags: [Catalog]
+      summary: Retorna configurações públicas do tenant
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/orders:
+    get:
+      tags: [Orders]
+      summary: Lista pedidos do tenant
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+        - {name: source, in: query, schema: {type: string}}
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+    post:
+      tags: [Orders]
+      summary: Cria pedido com idempotência
+      parameters:
+        - {name: Idempotency-Key, in: header, required: false, schema: {type: string}}
+        - {name: X-External-Order-Id, in: header, required: false, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OrderRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/Success'}
+        '422': {$ref: '#/components/responses/Error'}
+  /api/v1/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Consulta pedido por id interno
+      parameters: [{name: id, in: path, required: true, schema: {type: integer}}]
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/orders/{id}/cancel:
+    post:
+      tags: [Orders]
+      summary: Cancela pedido
+      parameters: [{name: id, in: path, required: true, schema: {type: integer}}]
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/orders/{id}/status:
+    post:
+      tags: [Orders]
+      summary: Avança status operacional do pedido
+      parameters: [{name: id, in: path, required: true, schema: {type: integer}}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties: {status: {type: string}, note: {type: string}}
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/customers:
+    get:
+      tags: [Customers]
+      summary: Lista clientes
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+    post:
+      tags: [Customers]
+      summary: Cria ou atualiza cliente por telefone/e-mail dentro do tenant
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CustomerRequest'}
+      responses: {'201': {$ref: '#/components/responses/Success'}}
+  /api/v1/customers/{id}:
+    get:
+      tags: [Customers]
+      summary: Consulta cliente, endereços e histórico
+      parameters: [{name: id, in: path, required: true, schema: {type: integer}}]
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/customers/{id}/loyalty:
+    get:
+      tags: [Customers]
+      summary: Consulta saldo e movimentações de fidelidade
+      parameters: [{name: id, in: path, required: true, schema: {type: integer}}]
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/coupons/validate:
+    post:
+      tags: [Coupons]
+      summary: Valida cupom e calcula desconto
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, subtotal]
+              properties: {code: {type: string}, subtotal: {type: number}, customer_id: {type: integer}, delivery_fee: {type: number}}
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/delivery-areas:
+    get:
+      tags: [Delivery]
+      summary: Lista áreas de entrega
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/delivery/check:
+    post:
+      tags: [Delivery]
+      summary: Verifica endereço, taxa, mínimo e prazo
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address, subtotal]
+              properties: {address: {type: object}, subtotal: {type: number}}
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+  /api/v1/dashboard:
+    get:
+      tags: [Analytics]
+      summary: Indicadores operacionais do dia
+      responses: {'200': {$ref: '#/components/responses/Success'}}
+components:
+  securitySchemes:
+    apiKey: {type: apiKey, in: header, name: X-API-Key}
+    bearer: {type: http, scheme: bearer}
+  parameters:
+    Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+    PerPage: {name: per_page, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+  schemas:
+    CustomerRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+        phone: {type: string}
+        whatsapp: {type: string}
+        email: {type: string, format: email}
+        document: {type: string}
+        address: {type: object}
+    OrderRequest:
+      type: object
+      required: [items]
+      properties:
+        external_order_id: {type: string}
+        source: {type: string, example: ecommerce_site}
+        customer_id: {type: integer}
+        customer: {$ref: '#/components/schemas/CustomerRequest'}
+        items:
+          type: array
+          items:
+            type: object
+            required: [quantity]
+            properties:
+              product_id: {type: integer}
+              combo_id: {type: integer}
+              size_id: {type: integer}
+              quantity: {type: number}
+              addons: {type: array, items: {type: object}}
+        delivery_address: {type: object}
+        payment_method: {type: string, enum: [pix, card, cash, payment_link, other]}
+        coupon_code: {type: string}
+        utm: {type: object}
+  responses:
+    Success:
+      description: Operação realizada
+      content:
+        application/json:
+          schema:
+            type: object
+            properties: {success: {type: boolean}, data: {type: object}, meta: {type: object}}
+    Error:
+      description: Erro de validação, autenticação ou processamento
+      content:
+        application/json:
+          schema:
+            type: object
+            properties: {success: {type: boolean}, error: {type: object}}

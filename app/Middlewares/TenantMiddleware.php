@@ -6,48 +6,26 @@ use App\Core\Middleware;
 use App\Core\TenantContext;
 use App\Models\Tenant;
 
-/**
- * Carrega o tenant ativo da sessao para o TenantContext antes do
- * Controller ser executado. So e necessario em projetos multi-tenant;
- * caso contrario, simplesmente nao registre este middleware nas rotas.
- */
-class TenantMiddleware extends Middleware {
-    public function handle(): void {
-        if (!Auth::check()) {
-            header('Location: /login');
-            exit;
-        }
-
-        // Superadmin: so precisa de contexto se estiver "entrando" em um tenant especifico
-        if (Auth::isSuperAdmin()) {
-            $tenantId = Auth::tenantId();
-            if (!$tenantId) return;
-
-            $tenant = (new Tenant())->findById($tenantId);
-            if ($tenant) TenantContext::set($tenant);
-            return;
-        }
-
-        // Se o usuario nao esta vinculado a nenhum tenant, o multi-tenant
-        // simplesmente nao esta em uso neste projeto — segue sem contexto.
-        $tenants = Auth::userTenants();
-        if (empty($tenants)) {
-            return;
-        }
-
+class TenantMiddleware extends Middleware
+{
+    public function handle(): void
+    {
+        if (!Auth::check()) { header('Location: /login'); exit; }
+        TenantContext::clear();
         $tenantId = Auth::tenantId();
         if (!$tenantId) {
-            header('Location: /selecionar-empresa');
-            exit;
+            if (Auth::isSuperAdmin() || count(Auth::userTenants()) > 1) { header('Location: /selecionar-empresa'); exit; }
+            http_response_code(403); echo 'Nenhuma empresa ativa foi vinculada a este usuário.'; exit;
         }
-
         $tenant = (new Tenant())->findById($tenantId);
         if (!$tenant || $tenant->status !== 'active') {
-            Auth::logout();
-            header('Location: /login?error=tenant_inativo');
-            exit;
+            Auth::logout(); header('Location: /login?error=tenant_inativo'); exit;
         }
-
+        if (!Auth::isSuperAdmin()) {
+            $allowed = false;
+            foreach (Auth::userTenants() as $userTenant) if ((int) $userTenant->tenant_id === $tenantId && $userTenant->status === 'active') { $allowed = true; break; }
+            if (!$allowed) { Auth::logout(); header('Location: /login?error=tenant_invalido'); exit; }
+        }
         TenantContext::set($tenant);
     }
 }

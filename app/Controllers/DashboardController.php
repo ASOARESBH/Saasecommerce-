@@ -3,22 +3,16 @@ namespace App\Controllers;
 
 use App\Core\Auth;
 use App\Core\Controller;
-use App\Core\Database;
+use App\Core\TenantContext;
 
-/**
- * Controller de exemplo: tela inicial pos-login. Substitua o conteudo
- * de app/Views/dashboard/index.php pelas telas reais do seu projeto.
- */
-class DashboardController extends Controller {
-    public function index(): void {
-        $pdo = Database::getInstance();
-
-        $totalUsuarios = (int) $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
-
+class DashboardController extends Controller
+{
+    public function index(): void
+    {
         $this->view('dashboard/index', [
-            'title'         => 'Dashboard',
-            'usuario'       => Auth::user(),
-            'totalUsuarios' => $totalUsuarios,
+            'title' => 'Visão geral',
+            'usuario' => Auth::user(),
+            'tenant' => TenantContext::get(),
         ]);
     }
 }
